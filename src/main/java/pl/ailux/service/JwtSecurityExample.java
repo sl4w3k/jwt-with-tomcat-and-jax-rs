@@ -33,18 +33,31 @@ public class JwtSecurityExample {
     static {
         log.info("Inside static initializer...");
         JWK_LIST = new LinkedList<>();
-        for (int kid = 1; kid <= 3; kid++) {
-            JsonWebKey jwk = null;
+        for (int keyId = 1; keyId <= 3; keyId++) {
+            JsonWebKey jsonWebKey = null;
             try {
-                jwk = RsaJwkGenerator.generateJwk(2048);
-                log.info("PUBLIC KEY (" + kid + "): "
-                        + jwk.toJson(JsonWebKey.OutputControlLevel.PUBLIC_ONLY));
+                jsonWebKey = RsaJwkGenerator.generateJwk(2048);
+                log.info("PUBLIC KEY (" + keyId + "): "
+                        + jsonWebKey.toJson(JsonWebKey.OutputControlLevel.PUBLIC_ONLY));
             } catch (final JoseException e) {
                 log.error("", e);
             }
-            jwk.setKeyId(String.valueOf(kid));
-            JWK_LIST.add(jwk);
+            jsonWebKey.setKeyId(String.valueOf(keyId));
+            JWK_LIST.add(jsonWebKey);
         }
+        //other way
+        try {
+            final JsonWebKey json = JsonWebKey.Factory.newJwk(
+                    ("{\"e\": \"AQAB\",\"kty\": \"RSA\",\"n\": \"jdiuITITtq1LQoKQEwNuLZhD_B4NRMnZRZAHT3a0l-6E7Z5hatm" +
+                            "0RdpgmZvj-g5i1bPm_fbDjC7j11H9gJQ_f95B88_2AF3SpCPy9k9zsnP1qfPytTovuzm_g7jPWDvAvihKVmivNp" +
+                            "S-_5fGyrLlo16HckyXc9OBlCwZS5RIjNxFeTU_bf281CKBHvPIAbvFhp9e38D7cZwHTdopiN6CajKSYSBFfwwmH" +
+                            "Fdh-mRULPaxLCMJyBKJ9HKd8-69Q6cRYD3ZWQj7JqDp3FVcF0TFKiWZB6WHV3Sa24e9WJdN6XAGjVPsdUdbvZ8S" +
+                            "DYiFm8-f4JHtEz_UIaubxee_iUViJQ\"}"));
+            log.info("Newly created key {}", json.toJson());
+        } catch (final JoseException e) {
+            e.printStackTrace();
+        }
+
     }
 
     @Path("/status")
@@ -58,10 +71,10 @@ public class JwtSecurityExample {
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     public Response authenticateCredentials(@HeaderParam("username") final String username,
-                                            @HeaderParam("password") final String password){
+                                            @HeaderParam("password") final String password) {
         log.info("Authenticating User Credentials...");
         final boolean validUserData = isValidUserData(username, password);
-        if(!validUserData) {
+        if (!validUserData) {
             return Response.status(PRECONDITION_FAILED)
                     .entity("Please provide proper username and/or password").build();
         }
@@ -100,7 +113,7 @@ public class JwtSecurityExample {
     }
 
     private User findUserInDatabase(final String username, final String password) {
-       //TODO call some service here
+        //TODO call some service here
         return new User(username, password);
     }
 
@@ -121,31 +134,30 @@ public class JwtSecurityExample {
         claims.setNotBeforeMinutesInThePast(2);
         claims.setSubject(user.getUsername());
         claims.setStringListClaim("roles", user.getRolesList());
-        final JsonWebSignature jws = new JsonWebSignature();
-        jws.setPayload(claims.toJson());
-        jws.setKeyIdHeaderValue(senderJwk.getKeyId());
-        jws.setKey(senderJwk.getPrivateKey());
-        jws.setAlgorithmHeaderValue(AlgorithmIdentifiers.RSA_USING_SHA256);
-        String jwt = null;
+        final JsonWebSignature jsonWebSignature = new JsonWebSignature();
+        jsonWebSignature.setPayload(claims.toJson());
+        jsonWebSignature.setKeyIdHeaderValue(senderJwk.getKeyId());
+        jsonWebSignature.setKey(senderJwk.getPrivateKey());
+        jsonWebSignature.setAlgorithmHeaderValue(AlgorithmIdentifiers.RSA_USING_SHA256);
         try {
-            jwt = jws.getCompactSerialization();
+            return jsonWebSignature.getCompactSerialization();
         } catch (final JoseException e) {
-            log.error("", e);
+            log.error("Error on generating unique token");
+            throw new RuntimeException(e);
         }
-        return jwt;
     }
 
     private boolean isTokenValid(final String token) {
-        final JsonWebKeySet jwks = new JsonWebKeySet(JWK_LIST);
-        final JsonWebKey jwk = jwks.findJsonWebKey("1", null,  null,  null);
-        log.info("JWK (1) ===> " + jwk.toJson());
+        final JsonWebKeySet jsonWebKeySet = new JsonWebKeySet(JWK_LIST);
+        final JsonWebKey jsonWebKey = jsonWebKeySet.findJsonWebKey("1", null, null, null);
+        log.info("JWK (1) ===> " + jsonWebKey.toJson());
         // Validate Token's authenticity and check claims
         final JwtConsumer jwtConsumer = new JwtConsumerBuilder()
                 .setRequireExpirationTime()
                 .setAllowedClockSkewInSeconds(30)
                 .setRequireSubject()
                 .setExpectedIssuer(ISSUER)
-                .setVerificationKey(jwk.getKey())
+                .setVerificationKey(jsonWebKey.getKey())
                 .build();
         try {
             //  Validate the JWT and process it to the Claims
